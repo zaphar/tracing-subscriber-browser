@@ -40,13 +40,13 @@ impl Visit for Recorder {
             // NOTE(jwall): We always want the message to appear at the front of the
             // log content.
             if !self.buffer.is_empty() {
-                self.buffer = format!("{:?}\n{}", value, self.buffer);
+                self.buffer = format!("{:#?}\n{}", value, self.buffer);
             } else {
-                self.buffer = format!("{:?}\n", value);
+                self.buffer = format!("{:#?}\n", value);
             }
         } else {
-            writeln!(self.buffer, "{}={:?} ", field.name(), value)
-                .expect("Failed to write field to ConsoleRecorder buffer");
+            writeln!(self.buffer, "{}={:#?} ", field.name(), value)
+                .expect("Failed to write field to Recorder buffer");
         }
     }
 }
