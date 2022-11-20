@@ -29,6 +29,7 @@ mod typings;
 pub struct BrowserLayer {
     record_timings: bool,
     max_level: tracing::Level,
+    //span_stack: Vec<span::Id>,
 }
 
 impl Default for BrowserLayer {
@@ -55,7 +56,13 @@ impl BrowserLayer {
         self
     }
 
-    pub fn write_for_level(&self, level: &tracing::Level, origin: String, recorder: Recorder) {
+    pub fn write_for_level(
+        &self,
+        level: &tracing::Level,
+        origin: String,
+        context: Option<Vec<String>>,
+        recorder: Recorder,
+    ) {
         let f: fn(String) = match *level {
             tracing::Level::ERROR => typings::error,
             tracing::Level::WARN => typings::warn,
@@ -63,7 +70,13 @@ impl BrowserLayer {
             tracing::Level::DEBUG => typings::debug,
             tracing::Level::TRACE => typings::trace,
         };
-        f(format!("{} {} {}", level, origin, recorder));
+        let spans = context
+            .map(|v| {
+                let s: String = v.concat();
+                s
+            })
+            .unwrap_or_else(|| String::new());
+        f(format!("{} {} {} {}", level, origin, recorder, spans));
     }
 }
 
@@ -97,16 +110,35 @@ impl<S: tracing::Subscriber + for<'a> LookupSpan<'a>> Layer<S> for BrowserLayer 
         }
     }
 
-    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+    fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
         let mut recorder = Recorder::new();
         event.record(&mut recorder);
         let metadata = event.metadata();
+        let recorders = ctx.current_span().id().and_then(|id| {
+            ctx.span_scope(id).map(|scope| {
+                let span_details: Vec<String> = scope
+                    .from_root()
+                    .map(|span_ref| {
+                        format!(
+                            "{} {}",
+                            span_ref.name(),
+                            span_ref
+                                .extensions()
+                                .get::<Recorder>()
+                                .expect("Unregistered Span")
+                        )
+                    })
+                    .collect();
+                span_details
+            })
+        });
         self.write_for_level(
             metadata.level(),
             metadata
                 .file()
                 .and_then(|file| metadata.line().map(|ln| format!("{}:{}", file, ln)))
                 .unwrap_or_default(),
+            recorders,
             recorder,
         );
     }
